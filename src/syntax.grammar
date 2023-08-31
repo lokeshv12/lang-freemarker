@@ -1,0 +1,113 @@
+//!top
+@top Template { (entity)* }
+
+//!For ArrayExpression
+boolean { @specialize[@name=BooleanLiteral]<Identifier, "true" | "false"> }
+VariableName { Identifier ~arrow }
+
+expressionNoComma {
+  Number |
+  String |
+  VariableName |
+  boolean 
+}
+
+commaSep<content> {
+  content ("," content)*
+}
+
+ArrayExpression {
+  "[" commaSep<"..."? expressionNoComma | ""> ~destructure "]"
+}
+
+variableExpression {
+  "${" expressionNoComma "}"
+}
+
+//!dialects
+
+@dialects { noMatch }
+
+//!entity
+entity[@isGroup=Entity] {
+  Variable | PlainText | variableExpression
+}
+
+@skip { space | Comment }
+
+//!Variable  
+Variable {
+  OpenTag expression* CloseTag |
+  OpenBrace expression* CloseBrace
+}
+
+//!expression
+expression[@isGroup=Expression] {
+  Identifier |
+  ChainedIdentifier | 
+  ArrayExpression
+}
+
+//!comment
+@skip {} {
+  Comment {
+    "<#--" (commentContent | commentNewline)* commentEnd
+  }
+  //!Tags
+  OpenTag[closedBy=CloseTag] {
+    StartTag TagName AttributeName* EndTag
+  }
+
+  CloseTag[openedBy=OpenTag] {
+    StartCloseTag TagName EndTag
+  }
+}
+
+@local tokens {
+  commentEnd { "-->" }
+  commentNewline { "\n" }
+  @else commentContent
+}
+
+@tokens {
+  PlainText { ![{[()#@$<}/] PlainText? |  "{" (@eof | ![{&!^] PlainText?) }
+  
+  ChainedIdentifier { Identifier ("." Identifier)+ }
+  
+  StartTag[closedBy=StartCloseTag] { "<"| "</" | "[" | "[/"}
+  StartCloseTag[openedBy=StartTag] { ">" | "]" | "/>"}
+  EndTag[openedBy=StartTag] { ">" | "/>" }
+
+  OpenBrace[closedBy=CloseBrace] { "{{"}
+  CloseBrace[closedBy=OpenBrace] { "}}"}
+
+  space { $[ \t\n\r]+ }
+
+   Number {
+    (@digit ("_" | @digit)* ("." ("_" | @digit)*)? | "." @digit ("_" | @digit)*)
+      (("e" | "E") ("+" | "-")? ("_" | @digit)+)? |
+    @digit ("_" | @digit)* "n" |
+    "0x" (@digit | $[a-fA-F] | "_")+ "n"? |
+    "0b" $[01_]+ "n"? |
+    "0o" $[0-7_]+ "n"?
+  }
+
+  String {
+    '"' (![\\\n"] | "\\" _)* '"'? |
+    "'" (![\\\n'] | "\\" _)* "'"?
+  }
+
+  identifierChar { @asciiLetter | $[_$\u{a1}-\u{10ffff}] }
+
+  word { identifierChar (identifierChar | @digit)* }
+
+  Identifier { word }
+
+  TagName { "#" Identifier | '@' Identifier }
+  
+  AttributeName { Identifier }
+
+  @precedence {space, TagName, PlainText, ChainedIdentifier, Identifier }
+}
+
+@detectDelim
